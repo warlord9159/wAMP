@@ -46,6 +46,7 @@ typedef struct QtrleContext {
     const unsigned char *buf;
     int size;
 
+    uint32_t pal[256];
 } QtrleContext;
 
 #define CHECK_STREAM_PTR(n) \
@@ -416,6 +417,7 @@ static av_cold int qtrle_decode_init(AVCodecContext *avctx)
         break;
     }
 
+    avcodec_get_frame_defaults(&s->frame);
     s->frame.data[0] = NULL;
 
     return 0;
@@ -511,12 +513,15 @@ static int qtrle_decode_frame(AVCodecContext *avctx,
     }
 
     if(has_palette) {
-        /* make the palette available on the way out */
-        memcpy(s->frame.data[1], s->avctx->palctrl->palette, AVPALETTE_SIZE);
-        if (s->avctx->palctrl->palette_changed) {
+        const uint8_t *pal = av_packet_get_side_data(avpkt, AV_PKT_DATA_PALETTE, NULL);
+
+        if (pal) {
             s->frame.palette_has_changed = 1;
-            s->avctx->palctrl->palette_changed = 0;
+            memcpy(s->pal, pal, AVPALETTE_SIZE);
         }
+
+        /* make the palette available on the way out */
+        memcpy(s->frame.data[1], s->pal, AVPALETTE_SIZE);
     }
 
 done:
@@ -538,15 +543,14 @@ static av_cold int qtrle_decode_end(AVCodecContext *avctx)
 }
 
 AVCodec ff_qtrle_decoder = {
-    "qtrle",
-    AVMEDIA_TYPE_VIDEO,
-    CODEC_ID_QTRLE,
-    sizeof(QtrleContext),
-    qtrle_decode_init,
-    NULL,
-    qtrle_decode_end,
-    qtrle_decode_frame,
-    CODEC_CAP_DR1,
+    .name           = "qtrle",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_QTRLE,
+    .priv_data_size = sizeof(QtrleContext),
+    .init           = qtrle_decode_init,
+    .close          = qtrle_decode_end,
+    .decode         = qtrle_decode_frame,
+    .capabilities   = CODEC_CAP_DR1,
     .long_name = NULL_IF_CONFIG_SMALL("QuickTime Animation (RLE) video"),
 };
 

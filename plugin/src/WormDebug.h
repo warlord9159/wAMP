@@ -14,7 +14,7 @@
 #include <cstring>
 #include <stdint.h>
 #include "Messages.h"
-
+#include "../src/MemManager/MemoryManager.h"
 
 //**************************************************************
 // universal Error stuff -- this handles runtime error passing
@@ -34,6 +34,8 @@ ReportError1("There was an error: %s", g_cstrErrorStr); \
 
 //**************************************************************
 
+#define ERROUT stderr
+
 //**************************************************************
 // Code debugging -- this is meant for providing us infor while
 //	we are in the development process, and gets turned off in
@@ -48,8 +50,6 @@ extern int16_t SafeStrcpy(char *cstrDest, const char *cstrSrc, int x);
 #ifndef ON_DEVICE
 
 #include <stdio.h>
-
-#define ERROUT stderr
 
 #define ReportError(s) fprintf(ERROUT, "[" __FILE__ ":%i] ReportError: " s "\n", __LINE__)
 #define ReportError1(s, a) fprintf(ERROUT, "[" __FILE__ ":%i] ReportError: " s "\n", __LINE__, a)
@@ -68,7 +68,7 @@ extern int16_t SafeStrcpy(char *cstrDest, const char *cstrSrc, int x);
 #define ReportError14(s, a, b, c, d, e, f, g, h, i, j, k, l, m, n) fprintf(ERROUT, "[" __FILE__ ":%i] ReportError: " s "\n", __LINE__, a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 #define ReportError15(s, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) fprintf(ERROUT, "[" __FILE__ ":%i] ReportError: " s "\n", __LINE__, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
 
-
+#define VReportError(s, v) vfprintf(ERROUT, s, v)
 
 #else
 
@@ -94,6 +94,7 @@ extern int16_t SafeStrcpy(char *cstrDest, const char *cstrSrc, int x);
 
 #define Worm_OpenLog(a,b,c) openlog(a, b, c);
 
+#define VReportError(s, v) vsyslog(LOG_WARNING, s, v)
 
 #endif // #if DEBUG
 
@@ -118,6 +119,10 @@ extern int16_t SafeStrcpy(char *cstrDest, const char *cstrSrc, int x);
 #define ReportError13(s, a, b, c, d, e, f, g, h, i, j, k, l, m)
 #define ReportError14(s, a, b, c, d, e, f, g, h, i, j, k, l, m, n)
 #define ReportError15(s, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)
+
+#define Worm_OpenLog(a,b,c)
+
+#define VReportError(s, v)
 
 #ifndef NDEBUG
 #define NDEBUG

@@ -65,6 +65,9 @@
 // need to define the static variable here
 int32_t *ResampleFilter::m_psImp = NULL;
 
+int32_t ResampleFilter::m_RefLpScl 	= 0;
+int32_t ResampleFilter::m_LpScl 	= 0;
+
 //*********************
 // Inlines
 //*********************
@@ -126,7 +129,7 @@ inline double ResampleFilter::Izero(double x)
 
 
 
-void ResampleFilter::SetFilterRate(double f)
+void ResampleFilter::SetFilterRate(float f)
 {
 	if (f<0.25) f = 0.25;
 	m_fRate = f;
@@ -142,7 +145,13 @@ int32_t ResampleFilter::AdvanceByAmount(int32_t iRequested)
 	return retVal>>10;
 };
 
-
+// Used to figure out how far to advance the read pointer
+int32_t ResampleFilter::AdvanceByAmtStat(int32_t iRequested, int32_t FilterRate)
+{
+	int32_t retVal = iRequested * FilterRate;
+	retVal += (1<<9);
+	return retVal>>10;
+};
 
 // In
 // ---
@@ -548,6 +557,7 @@ void ResampleFilter::FilterDnLWAL(int64_t &vfpNewValD4, int32_t psInBuffer[],
 	}
 }
 
+
 //int64_t FilterDnRW(short *psInBuffer, short Phase); // inc +1
 void ResampleFilter::FilterDnLWNAL(int64_t &vfpNewValD4, int32_t psInBuffer[],
 						unsigned short Phase, unsigned short dhb )
@@ -765,7 +775,7 @@ void ResampleFilter::lrsLpFilter(double c[], int N, double frq, double Beta, int
 //************************************
 // Create the filter
 //************************************
-FiltMessage ResampleFilter::Init(AttributeHandler *pHandler)
+FiltMessage ResampleFilter::Init()
 {
 
 #ifdef BUILD_FILT_TABLE_DYNAMIC
@@ -913,10 +923,10 @@ FiltMessage ResampleFilter::Init(AttributeHandler *pHandler)
 	if (m_psImp == NULL)
 	{
 
-		m_psImp = (int32_t *) malloc(ResampleFilter::c_PackNWing*sizeof(int32_t));
+		m_psImp = (int32_t *) MALLOC(ResampleFilter::c_PackNWing*sizeof(int32_t));
 
 		//ReportError1("About to read filter table, %s", RESAMPLE_RES_PATH);
-		TableRead(RESAMPLE_RES_PATH);
+		ResampleFilter::TableRead(RESAMPLE_RES_PATH);
 		// We have an error
 		if (m_psImp == NULL)
 			return FILT_Error;
@@ -924,7 +934,6 @@ FiltMessage ResampleFilter::Init(AttributeHandler *pHandler)
 	}
 #endif //#ifndef ON_DEVICE
 
-	SetFilterRate(1.0);
 	return FILT_Success;
 };
 
@@ -966,7 +975,6 @@ void ResampleFilter::TableWrite(const char *FileName)
 // In case you want to use this outside my code interface, I have included
 //	the loading routines directly.  However, for my purposes I don't need
 //	them.
-#ifndef USE_RESOURCEMANAGER_H_
 #ifndef BUILD_FILT_TABLE_DYNAMIC
 
 #ifdef READ_LITTLE_ENDIAN
@@ -1037,13 +1045,10 @@ void ResampleFilter::TableRead(const char *FileName)
 }
 
 #endif //#ifndef BUILD_FILT_TABLE_DYNAMIC
-#endif //#ifndef USE_RESOURCEMANAGER_H_
 
-FiltMessage ResampleFilter::Close()
+FiltMessage ResampleFilter::Uninit()
 {
-#ifndef USE_RESOURCEMANAGER_H_
-	free(m_psImp);
-#endif
+	FREE(m_psImp);
 
 	return FILT_Success;
 };
@@ -1054,7 +1059,6 @@ FiltMessage ResampleFilter::Filter(uint32_t *psChanIn, size_t uiStartPos, size_t
 {
 	uint32_t *psChan = &psChanIn[uiStartPos];
 
-	//ReportError1("m_fRate=%f", m_fRate);
 
 	if ((m_fRate) < 1.0)
 	{

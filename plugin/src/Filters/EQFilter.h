@@ -61,6 +61,9 @@ enum EQ_KNOBS {
 
 
 #define FILTER_GAIN_SCALE		8
+#define VOL_FIXED_Q_FACTOR		10
+#define VOL_NORM_LEVEL			((1<<VOL_FIXED_Q_FACTOR)*1)
+
 
 #define FILTER_GAIN_RANGE 		24
 #define FILTER_GAIN_MIN			-12
@@ -92,6 +95,55 @@ public:
     int16_t process(int16_t x0);
 };
 
+class DualPassFilter
+{
+public:
+	BiQuadFilter FilterOne;
+	BiQuadFilter FilterTwo;
+
+	void setLowPass(double cf, double sf, double gain, double slope)
+	{
+		FilterOne.setLowPass(cf, sf, gain, slope);
+		FilterTwo.setLowPass(cf, sf, gain, slope);
+	};
+
+	void setHighPass(double cf, double sf, double gain, double slope)
+	{
+		FilterOne.setHighPass(cf, sf, gain, slope);
+		FilterTwo.setHighPass(cf, sf, gain, slope);
+	}
+
+	int16_t process(int16_t x)
+	{
+		x = FilterTwo.process(x);
+		return FilterOne.process(x);
+	}
+
+	void reset() {FilterOne.reset(); FilterTwo.reset();};
+
+};
+
+class DualCascadingFilter
+{
+private:
+	DualPassFilter 	m_pbqfFilterBank[2];
+
+public:
+	void setBandPass(double lcf, double hcf, double sf)
+	{
+		m_pbqfFilterBank[0].setLowPass(hcf, sf, 0, L_H_PASS_Q_FACTOR);
+		m_pbqfFilterBank[1].setHighPass(lcf, sf, 0, L_H_PASS_Q_FACTOR);
+	};
+
+	int16_t process(int16_t x0)
+	{
+		x0 = m_pbqfFilterBank[0].process(x0);
+		return m_pbqfFilterBank[1].process(x0);
+	};
+
+	void reset() {m_pbqfFilterBank[0].reset(); m_pbqfFilterBank[1].reset();};
+};
+
 class CascadingIIRFilter
 {
 private:
@@ -113,21 +165,25 @@ public:
 	void reset() {m_pbqfFilterBank[0].reset(); m_pbqfFilterBank[1].reset();};
 };
 
-class BassTrebleFilter:public MusFilter
+class BassTrebleFilter
 {
 protected:
 
 	// IIR Filter variables
-	BiQuadFilter 		m_bqfIIRBassFilter[NUM_CHANNELS];
-	BiQuadFilter		m_bqfIIRTrebleFilter[NUM_CHANNELS];
-	CascadingIIRFilter	m_bqfIIRMidFilter[NUM_CHANNELS];
+	DualPassFilter 		m_bqfIIRBassFilter[NUM_CHANNELS];
+	DualPassFilter		m_bqfIIRTrebleFilter[NUM_CHANNELS];
+	DualCascadingFilter	m_bqfIIRMidFilter[NUM_CHANNELS];
 	
 	// FIR Filter variables
 	int16_t			m_psFIRBASSKnobCoef[BASS_TAP_NUM];
 	int16_t			m_psFIRTREBKnobCoef[TREBLE_TAP_NUM];
 	int16_t			m_psFIRMIDKnobCoef[MID_TAP_NUM];
 	
-
+	int16_t			m_sBassGain;
+	int16_t			m_sTrebleGain;
+	int16_t			m_sMidRangeGain;
+	int16_t			m_sVol;
+	
 	/* Computes a BiQuad filter on a sample */
 	void ProcessSampleIIR(int16_t *insample, int16_t *outsample,
 										size_t Requested, int16_t iChan);
@@ -141,24 +197,26 @@ protected:
 
 public:
 
-	FiltMessage Init(AttributeHandler *Handler);
+	FiltMessage Init();
 	FiltMessage Close() {return FILT_Success;};
-
-	static void SetFirUse(int32_t val);
-	static char *GetFirUse();
 				
-	static void SetBass(double fBass);
-	static char *GetBass();
+	void SetBass(float fBass);
+	char *GetBass();
 	
-	static void SetVol(double fBass);
-	static char *GetVol();
-
-	static void SetTreble(double fTreble);
-	static char *GetTreble();
+	void SetVol(float fBass);
+	char *GetVol();
+	void SetVolFix(int16_t iVol);
+	int16_t GetVolFix();
+	
+	void SetTreble(float fTreble);
+	char *GetTreble();
+	
+	void SetMid(float fTreble);
+	char *GetMid();
 	
 	void Reset();
 
-	void Filter(int16_t **psChanIn, size_t uiStartPos, size_t *piNumRead,
+	void Filter(int16_t *psChanIn, size_t uiStartPos, size_t *piNumRead,
 								int16_t *pucOutBuffer, size_t pRequested);
 
 };

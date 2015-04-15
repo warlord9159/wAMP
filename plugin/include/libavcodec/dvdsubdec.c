@@ -34,8 +34,8 @@ static void yuv_a_to_rgba(const uint8_t *ycbcr, const uint8_t *alpha, uint32_t *
 
     for (i = num_values; i > 0; i--) {
         y = *ycbcr++;
-        cb = *ycbcr++;
         cr = *ycbcr++;
+        cb = *ycbcr++;
         YUV_TO_RGB1_CCIR(cb, cr);
         YUV_TO_RGB2_CCIR(r, g, b, y);
         *rgba++ = (*alpha++ << 24) | (r << 16) | (g << 8) | b;
@@ -120,6 +120,14 @@ static void guess_palette(uint32_t *rgba_palette,
                           uint8_t *alpha,
                           uint32_t subtitle_color)
 {
+    static const uint8_t level_map[4][4] = {
+        // this configuration (full range, lowest to highest) in tests
+        // seemed most common, so assume this
+        {0xff},
+        {0x00, 0xff},
+        {0x00, 0x80, 0xff},
+        {0x00, 0x55, 0xaa, 0xff},
+    };
     uint8_t color_used[16];
     int nb_opaque_colors, i, level, j, r, g, b;
 
@@ -138,18 +146,18 @@ static void guess_palette(uint32_t *rgba_palette,
     if (nb_opaque_colors == 0)
         return;
 
-    j = nb_opaque_colors;
+    j = 0;
     memset(color_used, 0, 16);
     for(i = 0; i < 4; i++) {
         if (alpha[i] != 0) {
             if (!color_used[colormap[i]])  {
-                level = (0xff * j) / nb_opaque_colors;
+                level = level_map[nb_opaque_colors][j];
                 r = (((subtitle_color >> 16) & 0xff) * level) >> 8;
                 g = (((subtitle_color >> 8) & 0xff) * level) >> 8;
                 b = (((subtitle_color >> 0) & 0xff) * level) >> 8;
                 rgba_palette[i] = b | (g << 8) | (r << 16) | ((alpha[i] * 17) << 24);
                 color_used[colormap[i]] = (i + 1);
-                j--;
+                j++;
             } else {
                 rgba_palette[i] = (rgba_palette[color_used[colormap[i]] - 1] & 0x00ffffff) |
                                     ((alpha[i] * 17) << 24);
@@ -173,7 +181,6 @@ static int decode_dvd_subtitles(AVSubtitle *sub_header,
 
     if (buf_size < 10)
         return -1;
-    memset(sub_header, 0, sizeof(*sub_header));
 
     if (AV_RB16(buf) == 0) {   /* HD subpicture with 4-byte offsets */
         big_offsets = 1;
@@ -337,6 +344,10 @@ static int decode_dvd_subtitles(AVSubtitle *sub_header,
                 sub_header->rects[0]->pict.linesize[0] = w;
             }
         }
+        if (next_cmd_pos < cmd_pos) {
+            av_log(NULL, AV_LOG_ERROR, "Invalid command offset\n");
+            break;
+        }
         if (next_cmd_pos == cmd_pos)
             break;
         cmd_pos = next_cmd_pos;
@@ -487,13 +498,9 @@ static int dvdsub_decode(AVCodecContext *avctx,
 }
 
 AVCodec ff_dvdsub_decoder = {
-    "dvdsub",
-    AVMEDIA_TYPE_SUBTITLE,
-    CODEC_ID_DVD_SUBTITLE,
-    0,
-    NULL,
-    NULL,
-    NULL,
-    dvdsub_decode,
+    .name           = "dvdsub",
+    .type           = AVMEDIA_TYPE_SUBTITLE,
+    .id             = CODEC_ID_DVD_SUBTITLE,
+    .decode         = dvdsub_decode,
     .long_name = NULL_IF_CONFIG_SMALL("DVD subtitles"),
 };

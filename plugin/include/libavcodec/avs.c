@@ -63,7 +63,7 @@ avs_decode_frame(AVCodecContext * avctx,
         return -1;
     }
     p->reference = 1;
-    p->pict_type = FF_P_TYPE;
+    p->pict_type = AV_PICTURE_TYPE_P;
     p->key_frame = 0;
 
     out = avs->picture.data[0];
@@ -93,7 +93,7 @@ avs_decode_frame(AVCodecContext * avctx,
 
     switch (sub_type) {
     case AVS_I_FRAME:
-        p->pict_type = FF_I_TYPE;
+        p->pict_type = AV_PICTURE_TYPE_I;
         p->key_frame = 1;
     case AVS_P_FRAME_3X3:
         vect_w = 3;
@@ -146,19 +146,19 @@ avs_decode_frame(AVCodecContext * avctx,
 
 static av_cold int avs_decode_init(AVCodecContext * avctx)
 {
+    AvsContext *const avs = avctx->priv_data;
     avctx->pix_fmt = PIX_FMT_PAL8;
+    avcodec_get_frame_defaults(&avs->picture);
     return 0;
 }
 
 AVCodec ff_avs_decoder = {
-    "avs",
-    AVMEDIA_TYPE_VIDEO,
-    CODEC_ID_AVS,
-    sizeof(AvsContext),
-    avs_decode_init,
-    NULL,
-    NULL,
-    avs_decode_frame,
-    CODEC_CAP_DR1,
+    .name           = "avs",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_AVS,
+    .priv_data_size = sizeof(AvsContext),
+    .init           = avs_decode_init,
+    .decode         = avs_decode_frame,
+    .capabilities   = CODEC_CAP_DR1,
     .long_name = NULL_IF_CONFIG_SMALL("AVS (Audio Video Standard) video"),
 };

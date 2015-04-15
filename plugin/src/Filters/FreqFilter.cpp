@@ -20,6 +20,7 @@ http://www.smartelectronix.com/musicdsp/text/filters005.txt
 
 
 #include "EQFilter.h"
+#include "GraphEQ.h"
 #include <stdint.h>
 #include <limits.h>
 #include <stdio.h>
@@ -33,23 +34,16 @@ http://www.smartelectronix.com/musicdsp/text/filters005.txt
 #define BIQUAD_SFACTOR_SHIFT	11*/
 
 
+#ifndef MAX
 #define MAX(a,b) ((a)<(b)?(b):(a))
+#endif
+
 #define ABS(a)	 ((a)<0 ?(-(a)):(a))
 
 using namespace std;
 
-//*****************************
-// Callback Functions
-//*****************************
-// Need to declare these global in order to use the callback
-// Gain control
-int16_t			m_sBassGain;
-int16_t			m_sTrebleGain;
-int16_t			m_sVol;
-// decision variable on whether to use FIR or IIR
-int32_t 		m_bUseFir;
 
-void BassTrebleFilter::SetBass(double fBass)
+void BassTrebleFilter::SetBass(float fBass)
 {	
 	//ReportError1("Bass Set=%f", fBass);
 	m_sBassGain = (1<<FILTER_GAIN_SCALE) * fBass;
@@ -62,12 +56,35 @@ char* BassTrebleFilter::GetBass()
 	return str;
 };
 
-void BassTrebleFilter::SetVol(double fBass)
-{
+void BassTrebleFilter::SetMid(float fMid)
+{	
 	//ReportError1("Bass Set=%f", fBass);
-	m_sVol = ((1<<10)*0.85) * fBass;
+	m_sMidRangeGain = (1<<FILTER_GAIN_SCALE) * fMid;
 	//ReportError1("Bass Set(fixed)=%i", m_sBassGain);
 };
+char* BassTrebleFilter::GetMid() 
+{
+	char *str = (char *) malloc(10);
+	sprintf(str, "%f",((float)m_sMidRangeGain/(1<<FILTER_GAIN_SCALE)));
+	return str;
+};
+
+void BassTrebleFilter::SetVol(float fBass)
+{
+	//ReportError1("Bass Set=%f", fBass);
+	m_sVol = VOL_NORM_LEVEL * fBass;
+	//ReportError1("Bass Set(fixed)=%i", m_sBassGain);
+};
+// Set volume using Q10 number;
+void BassTrebleFilter::SetVolFix(int16_t iVol)
+{
+	m_sVol = iVol;
+}
+int16_t BassTrebleFilter::GetVolFix()
+{
+	return m_sVol;
+}
+
 char* BassTrebleFilter::GetVol()
 {
 	char *str = (char *) malloc(10);
@@ -75,7 +92,7 @@ char* BassTrebleFilter::GetVol()
 	return str;
 };
 
-void BassTrebleFilter::SetTreble(double fTreble)
+void BassTrebleFilter::SetTreble(float fTreble)
 {
 	//ReportError1("Treble Set=%f", fTreble);
 	m_sTrebleGain = (1<<FILTER_GAIN_SCALE) * fTreble;
@@ -88,65 +105,31 @@ char* BassTrebleFilter::GetTreble()
 	return str;
 };
 
-void BassTrebleFilter::SetFirUse(int32_t val) 
-{
-	m_bUseFir = val;
-};
-char* BassTrebleFilter::GetFirUse()
-{
-	char *str = (char *) malloc(10);
-	sprintf(str, "%i", m_bUseFir);
-	return str;
-}
 
 //*****************************
 // END Callback
-//*****************************
+//*****************************/
 
-FiltMessage BassTrebleFilter::Init(AttributeHandler *pHandler)
+FiltMessage BassTrebleFilter::Init()
 {
-	m_bUseFir = 0;
 	SetIIRFilterCoef();
-	SetFIRFilterCoef();
 	
 	SetBass(1.0);
+	SetMid(1.0);
 	SetTreble(1.0);
 	SetVol(1.0);
 
-	pHandler->RegisterDoubleAttribute(BassTrebleFilter::GetBass,
-									  BassTrebleFilter::SetBass,
-									  ATTRIB_BASSTREB_BASS_VAL);
-	pHandler->RegisterDoubleAttribute(BassTrebleFilter::GetTreble,
-									  BassTrebleFilter::SetTreble,
-									  ATTRIB_BASSTREB_TREB_VAL);
-	pHandler->RegisterDoubleAttribute(BassTrebleFilter::GetVol,
-									  BassTrebleFilter::SetVol,
-									  ATTRIB_BASSTREB_VOL_VAL);
-	pHandler->RegisterIntAttribute(BassTrebleFilter::GetFirUse,
-								   BassTrebleFilter::SetFirUse,
-								   ATTRIB_BASSTREB_USEFIR_VAL);
 	return FILT_Success;
 }
 
 
-void BassTrebleFilter::Filter(int16_t **psChanIn, size_t uiStartPos,
+void BassTrebleFilter::Filter(int16_t *psChanIn, size_t uiStartPos,
 						size_t *piNumRead, int16_t *pucOutBuffer, 
 						size_t pRequested)
 {
-	int16_t *psChan0 = (int16_t *) &psChanIn[0][uiStartPos];
-	int16_t *psChan1 = (int16_t *) &psChanIn[1][uiStartPos];
-
-	if (m_bUseFir)
-	{
-		ProcessSampleFIR(psChan0, pucOutBuffer, pRequested);
-		ProcessSampleFIR(psChan1, pucOutBuffer+1, pRequested);
-	}
-	else
-	{
-		ProcessSampleIIR(psChan0, pucOutBuffer, pRequested, 0);
-		ProcessSampleIIR(psChan1, pucOutBuffer+1, pRequested, 1);
-
-	}
+	int16_t *psChan0 = (int16_t *) &psChanIn[uiStartPos];
+	
+	ProcessSampleIIR(psChan0, pucOutBuffer, pRequested, 0);
 }
 
 
@@ -220,7 +203,7 @@ void BassTrebleFilter::ProcessSampleFIR(int16_t *insample, int16_t *outsample,
 		}
 
 		*outpos = (short) iResult;
-		outpos += 2;
+		outpos++;
 	}
 }
 
@@ -240,22 +223,33 @@ void BassTrebleFilter::ProcessSampleIIR(int16_t *insample, int16_t *outsample,
 		sample = *insample++;
 
 		iTemp = m_bqfIIRBassFilter[iChan].process(sample) * m_sBassGain;
+		iTemp += 1 << (FILTER_GAIN_SCALE - 1);
 		iResult = iTemp >> FILTER_GAIN_SCALE;
 
 
 		iTemp = m_bqfIIRTrebleFilter[iChan].process(sample) * m_sTrebleGain;
+		iTemp += 1 << (FILTER_GAIN_SCALE - 1);
 		iResult += iTemp >> FILTER_GAIN_SCALE;
 
 
-		iResult += m_bqfIIRMidFilter[iChan].process(sample);
-
+		iTemp = m_bqfIIRMidFilter[iChan].process(sample) * m_sMidRangeGain;
+		iTemp += 1 << (FILTER_GAIN_SCALE - 1);
+		iResult += iTemp >> FILTER_GAIN_SCALE;
 
 		iResult *= m_sVol;
 		iResult >>= 10;
 
+		if (iResult > SHRT_MAX)
+		{
+			iResult = SHRT_MAX;
+		}
+		else if (iResult < SHRT_MIN)
+		{
+			iResult = SHRT_MIN;
+		}
 
 		*outpos = (int16_t) iResult;
-		outpos += 2;
+		outpos++;
 	}
 }
 
@@ -285,9 +279,9 @@ void BassTrebleFilter::SetIIRFilterCoef( )
 		// First set the low pass filter
 		m_bqfIIRBassFilter[i].setLowPass(200, DEST_FREQ, 0, L_H_PASS_Q_FACTOR);
 		// Next set the high pass filter
-		m_bqfIIRTrebleFilter[i].setHighPass(6000, DEST_FREQ, 0, L_H_PASS_Q_FACTOR);
+		m_bqfIIRTrebleFilter[i].setHighPass(5000, DEST_FREQ, 0, L_H_PASS_Q_FACTOR);
 		// Finally set set the bandpass
-		m_bqfIIRMidFilter[i].setBandPass(400,3000, DEST_FREQ);
+		m_bqfIIRMidFilter[i].setBandPass(200,5000, DEST_FREQ);
 	}
 }
 
@@ -661,3 +655,118 @@ inline int16_t BiQuadFilter::process(int16_t inSamp)
     return y0;
 }
 
+
+void GraphEQ::SetIIRFilterCoef( )
+{
+	for (int i=0;i<NUM_CHANNELS;i++)
+	{
+		// First set the low pass filter
+		m_bqfIIRBassFilter[i].setLowPass(40, DEST_FREQ, 0, L_H_PASS_Q_FACTOR);
+		// Next set the high pass filter
+		m_bqfIIRTrebleFilter[i].setHighPass(8448, DEST_FREQ, 0, L_H_PASS_Q_FACTOR);
+		// Finally set set the bandpass
+		m_bqfIIRMidFilter[i][0].setBandPass(40, 160, DEST_FREQ);
+		m_bqfIIRMidFilter[i][1].setBandPass(160, 528, DEST_FREQ);
+		m_bqfIIRMidFilter[i][2].setBandPass(528, 2112, DEST_FREQ);
+		m_bqfIIRMidFilter[i][3].setBandPass(2112, 8448, DEST_FREQ);
+	}
+}
+
+
+void GraphEQ::SetEQVals(const char *Vals)
+{
+	int32_t iModVal;
+
+	iModVal = (int32_t) *(Vals++);
+	m_sEQGain[0] = (iModVal < 0) ? 0 : iModVal;
+
+	iModVal = (int32_t) *(Vals++) + 1;
+	m_sEQGain[1] = (iModVal < 0) ? 0 : iModVal;
+
+	iModVal = (int32_t) *(Vals++);
+	m_sEQGain[2] = (iModVal < 0) ? 0 : iModVal;
+
+	iModVal = (int32_t) *(Vals++) - 2;
+	m_sEQGain[3] =  (iModVal < 0) ? 0 : iModVal;
+
+	iModVal = (int32_t) *(Vals++) - 2;
+	m_sEQGain[4] = (iModVal < 0) ? 0 : iModVal;
+
+	iModVal = (int32_t) *(Vals++) - 2;
+	m_sEQGain[5] = (iModVal < 0) ? 0 : iModVal;
+}
+
+FiltMessage GraphEQ::Init()
+{
+	SetIIRFilterCoef();
+
+	m_sEQGain[0] = 127;
+	m_sEQGain[1] = 128;
+	m_sEQGain[2] = 127;
+	m_sEQGain[3] = 125;
+	m_sEQGain[4] = 125;
+	m_sEQGain[5] = 125;
+
+	return FILT_Success;
+}
+
+/* Computes a BiQuad filter on a sample */
+void GraphEQ::ProcessSampleIIR(int16_t *insample, int16_t *outsample,
+										size_t Requested, int16_t iChan)
+{
+	int16_t *outpos = outsample;
+	int16_t sample;
+	int32_t iResult;
+	int32_t iTemp;
+
+
+	while (outpos < (outsample + Requested))
+	{
+		sample = *insample++;
+
+		iTemp = m_bqfIIRBassFilter[iChan].process(sample) *
+												m_sEQGain[0];
+		iTemp += 1 << (EQ_GAIN_Q - 1);
+		iResult = iTemp >> (EQ_GAIN_Q);
+
+
+		iTemp = m_bqfIIRTrebleFilter[iChan].process(sample) *
+												m_sEQGain[TOTAL_EQ_NUM-1];
+		iTemp += 1 << (EQ_GAIN_Q - 1);
+		iResult += iTemp >> (EQ_GAIN_Q);
+
+
+		for (int i=0;i<NUM_MID_EQ_FILT;i++)
+		{
+			iTemp = m_bqfIIRMidFilter[iChan][i].process(sample) *
+												m_sEQGain[i+1];
+			iTemp += 1 << (EQ_GAIN_Q - 1);
+			iResult += iTemp >> (EQ_GAIN_Q);
+		}
+
+
+
+		if (iResult > SHRT_MAX)
+		{
+			iResult = SHRT_MAX;
+		}
+		else if (iResult < SHRT_MIN)
+		{
+			iResult = SHRT_MIN;
+		}
+
+		*outpos = (int16_t) iResult;
+		outpos+=2;
+	}
+}
+
+
+void GraphEQ::Filter(int16_t *psChan0, int16_t *psChan1,
+						int16_t *pucOutBuffer,
+						size_t pRequested)
+{
+
+	ProcessSampleIIR(psChan0, pucOutBuffer, pRequested, 0);
+	ProcessSampleIIR(psChan1, pucOutBuffer+1, pRequested, 1);
+
+}

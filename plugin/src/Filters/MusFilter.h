@@ -31,7 +31,6 @@
 
 #include "config.h"
 #include "../WormDebug.h"
-#include "../WormAttribute.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -44,23 +43,6 @@ enum FiltMessage
 };
 
 
-// It is hard to define a generic Filter type.  This works for the resample filter, but it is
-// unclear whether this will work as well for the pitch correction filter.  The reason
-// to use a generic Filter class is to simplify adding filters on the MusController side.
-class MusFilter
-{
-public:
-
-// The Resource Manager class is something I may or may not develop in the future.  The idea
-// was centralize loading for the main MP3 player.  However, it came at the expense of making
-// each module more dependent on each other, which I want to avoid.
-
-	// Called by MusController when it Init's itself
-	virtual FiltMessage Init(AttributeHandler *Handler) = 0;
-
-	// called by MusController when it exits.
-	virtual FiltMessage Close() = 0;
-};
 
 
 // This class performs the actual resampling.  The important point to realize is that
@@ -69,7 +51,7 @@ public:
 //	[[Sample #1][Sample #2]].  This format occured by historical accident because I was
 //	playing around with optimization and thought the alternating pattern would be
 //	faster, and then didn't bother to change it once I realized it didn't make a difference.
-class ResampleFilter:public MusFilter
+class ResampleFilter
 {
 private:
 	
@@ -81,12 +63,10 @@ private:
 	static int32_t  	*m_psImp;
 
 	// VAR SETTING CODE
-	double 		m_fRate;
-	int32_t 	m_RefLpScl;
-	int32_t		m_LpScl;
-	int32_t		m_iIncrScale;
-
-
+	float 			m_fRate;
+	static int32_t 	m_RefLpScl;
+	static int32_t	m_LpScl;
+	int32_t			m_iIncrScale;
 
 	// In
 	// ---
@@ -169,7 +149,7 @@ private:
 #endif
 	
 	// this is used for recovering the table on the device
-	void TableRead(const char *FileName);
+	static void TableRead(const char *FileName);
 
 
 
@@ -179,7 +159,7 @@ public:
 	static const double c_HIGHFILTER 			= HIGH_SPEED_RATIO_LIM;
 	static const double c_ROLLOFF				= 0.90;
 	static const double c_BETA					= 6;
-	static const unsigned short c_NlpScl 		= 17;
+	static const unsigned short c_NlpScl 		= 16;
 	static const unsigned short c_NHC			= 16;
 	static const unsigned short c_NH			= 16;
 	static const unsigned short c_NP			= 16;
@@ -193,15 +173,17 @@ public:
 	static const unsigned int	c_PackNWing		= c_NPC * c_PackFiltLen;
 
 
-	FiltMessage Init(AttributeHandler *Handler);
+	static FiltMessage Init();
 
-	FiltMessage Close();
+	static FiltMessage Uninit();
+
 	FiltMessage Filter(uint32_t *psChanin, size_t uiStartPos, size_t *piNumRead,
 								int16_t *pucOutBuffer, size_t pRequested);
 	float GetSpeed() {return m_fRate;};
-	void SetFilterRate(double f);
+	void SetFilterRate(float f);
 	int32_t AdvanceByAmount(int32_t iRequested);
 
+	static int32_t AdvanceByAmtStat(int32_t iRequested, int32_t FilterRate);
 };
 
 

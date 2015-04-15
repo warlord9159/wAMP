@@ -23,7 +23,7 @@
 //**For filters
 #define ATTRIB_BASSTREB_BASS_VAL			1
 #define ATTRIB_BASSTREB_TREB_VAL			2
-#define ATTRIB_BASSTREB_USEFIR_VAL			3
+#define ATTRIB_BASSTREB_MID_VAL				3
 #define ATTRIB_BASSTREB_VOL_VAL				6
 
 //**For music module
@@ -31,6 +31,9 @@
 
 //**For resample
 #define ATTRIB_RESAMP_SPEED_VAL				5
+
+#define ATTRIB_EQ							7
+#define ATTRIB_CROSS_FADE					8
 
 // *********************************************************
 // Here we declare MusMessages
@@ -40,27 +43,37 @@
 //**Messages that will be passed by js to MusManager
 #define MUS_MESSAGE_ATTRIB_SET				(1<<21)
 #define MUS_MESSAGE_ATTRIB_GET				(1<<22)
-#define MUS_MESSAGE_GET_SONG_STATE			1
+#define MUS_MESSAGE_GET_SONG_CUR			1
 #define MUS_MESSAGE_GET_CURSONG_PATH		2
 #define MUS_MESSAGE_SEEK					3
 #define MUS_MESSAGE_GET_META				4
+#define MUS_MESSAGE_GET_SONG_END			5
 // Here we define the different ways to open the next music file
 #define MUS_MESSAGE_OPEN_SONG				11
 #define MUS_MESSAGE_SET_NEXT				12
 // Here we define messages to to send to the indexer
 #define MUS_MESSAGE_GET_CURRENT_DIR_LS		20
 #define MUS_MESSAGE_GET_FULL_SONG_INDEX		21
+#define MUS_MESSAGE_GET_BPM					22
+#define MUS_MESSAGE_SET_NO_NEXT				23
+#define MUS_MESSAGE_GET_FREQ_STR			24
+#define MUS_MESSAGE_GET_MAG_STR				25
 
 // define the messages to handle song transitions
 #define MUS_MESSAGE_SET_NEXT_META			30
 #define MUS_MESSAGE_PASS_SONG_INFO			31
 
+
 //**MusManager status states
-#define MUS_STATUS_SONG_LOADED				101
-#define MUS_STATUS_LOADING_NEXT_SONG		107
+#define MUS_STATUS_BUF_FULL					101
+#define MUS_STATUS_BUFFERING				107
+#define MUS_STATUS_INITIAL_BUFFERING		112
 #define MUS_STATUS_ERROR					102
 #define MUS_STATUS_WAITING_FOR_SONG			103
 #define MUS_STATUS_LOADING					105
+#define MUS_STATUS_UNDER_FLOW				112
+#define MUS_STATUS_SOURCE_EOF				110
+#define MUS_STATUS_PLAYING					111
 
 //**special status updates for second song
 #define MUS_STATUS_NEXT_SONG_SET			106
@@ -69,7 +82,12 @@
 //**MusManager internal message passing
 #define MUS_INTMES_END_OF_SONG_REACHED		1001
 #define MUS_INTMES_BUFFER_UNDERFLOW			1002
+#define MUS_INTMES_NEXT_FRAME				1003
 
+//**PIPE-IN possible return messages
+#define MUS_PIPEINMES_PIPE_FULL				1004
+#define MUS_PIPEINMES_PACKET_ADDED			1005
+#define MUS_PIPEINMES_NO_MORE_PACKETS		1006
 
 //**MusManager Error Codes
 #define MUS_ERROR_CODE_CLEAR				0
@@ -90,18 +108,30 @@
 // *********************************************************
 // Here we declare some generic message structs
 // *********************************************************
+#define META_PATH	0
+#define META_TITLE	1
+#define META_ARTIST	2
+
 struct MusicMessage
 {
 	MUS_MESSAGE Msg;
 
 	// Other variables for passing additional info
-	char StrData[200];
+	char *StrData;
 	int32_t	IntData;
 	double 	DoubleData;
-
-	char *MetaPointer;
+	int32_t Track;
+	char *Meta[3];
 
 	MusicMessage *Next;
+};
+
+class MsgHandler
+{
+public:
+
+	virtual const char*	PassMessage(MUS_MESSAGE cmMsg,...) = 0;
+
 };
 
 #endif /* MESSAGES_H_ */
